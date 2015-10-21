@@ -18,12 +18,19 @@ package org.jboss.qa.jcontainer.wildfly;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.configuration.PropertiesConfiguration;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.SystemUtils;
 
 import org.jboss.qa.jcontainer.Container;
 import org.jboss.qa.jcontainer.wildfly.utils.CoreUtils;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStreamReader;
 
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 public class WildflyContainer<T extends WildflyConfiguration, U extends WildflyClient<T>, V extends WildflyUser>
 		extends Container<T, U, V> {
 
@@ -66,5 +73,31 @@ public class WildflyContainer<T extends WildflyConfiguration, U extends WildflyC
 	@Override
 	public String getLogDirInternal() throws Exception {
 		return CoreUtils.getSystemProperty(client, "jboss.server.log.dir");
+	}
+
+	@Override
+	public synchronized void stop() throws Exception {
+		super.stop();
+		if (SystemUtils.IS_OS_WINDOWS) {
+			log.info("Windows OS: Kill jboss-modules process manually");
+
+			final String processName = "jboss-modules.jar";
+			Process p = Runtime.getRuntime().exec("jps");
+			BufferedReader inStream = new BufferedReader(new InputStreamReader(p.getInputStream()));
+			String line;
+			String pid = null;
+			while ((line = inStream.readLine()) != null) {
+				if (line.contains(processName)) {
+					pid = line.split("\\s+")[0];
+					break;
+				}
+			}
+			p.waitFor();
+			if (pid != null) {
+				p = Runtime.getRuntime().exec("taskkill /F /T /PID " + pid);
+				p.waitFor();
+			}
+
+		}
 	}
 }

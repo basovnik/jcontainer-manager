@@ -38,41 +38,6 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public abstract class Container<T extends Configuration, U extends Client<T>, V extends User> implements Closeable {
 
-	private static class ContainerLogger implements Runnable {
-
-		private volatile boolean stop;
-		private volatile Process process;
-		private volatile File logFile;
-
-		public ContainerLogger(File logFile, Process process) {
-			this.process = process;
-			this.logFile = logFile;
-		}
-
-		private void stop() {
-			stop = true;
-		}
-
-		@Override
-		public void run() {
-			try (Writer fileWriter = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(logFile),
-					"utf-8"))) {
-				try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-					String line = null;
-					final String newLine = System.getProperty("line.separator");
-					while (!stop && ((line = reader.readLine()) != null)) { // ends with server shutdown
-						fileWriter.write(line + newLine);
-						fileWriter.flush();
-					}
-				} catch (Exception e) {
-					// stream closed
-				}
-			} catch (Exception e) {
-				throw new IllegalStateException("Failed to write container standard output", e);
-			}
-		}
-	}
-
 	public static final String STDOUT_LOG_FILE_NAME = "stdout.log";
 
 	protected T configuration;
@@ -138,13 +103,15 @@ public abstract class Container<T extends Configuration, U extends Client<T>, V 
 		processBuilder.environment().putAll(System.getenv());
 		processBuilder.environment().putAll(configuration.getEnvProps());
 
+		processBuilder.redirectOutput(ProcessBuilder.Redirect.appendTo(getStdoutLogFile()));
+		processBuilder.redirectError(ProcessBuilder.Redirect.appendTo(getStdoutLogFile()));
+
 		final Process process = processBuilder.start();
 		waitForStarted();
 		shutdownThread = new Thread(new Runnable() {
 			public void run() {
 				if (process != null) {
 					process.destroy();
-					containerLogger.stop();
 					try {
 						process.waitFor();
 					} catch (InterruptedException e) {
@@ -154,9 +121,7 @@ public abstract class Container<T extends Configuration, U extends Client<T>, V 
 			}
 		});
 
-		// Consume container stream
-		containerLogger = new ContainerLogger(getStdoutLogFile(), process);
-		new Thread(containerLogger).start();
+		//new Thread(containerLogger).start();
 		Runtime.getRuntime().addShutdownHook(shutdownThread);
 	}
 
