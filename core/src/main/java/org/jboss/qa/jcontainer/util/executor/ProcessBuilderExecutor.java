@@ -39,7 +39,7 @@ public abstract class ProcessBuilderExecutor {
 	}
 
 	public static int syncExecute(final ProcessBuilder processBuilder, final File outAndErrFile) throws InterruptedException, IOException {
-		if (SystemUtils.IS_OS_HP_UX) {
+		if (SystemUtils.IS_OS_HP_UX || SystemUtils.IS_OS_AIX) {
 			final ProcessBuilderExecutor pbe = executeOnHpUx(processBuilder, outAndErrFile);
 			return pbe.waitFor();
 		}
@@ -52,7 +52,7 @@ public abstract class ProcessBuilderExecutor {
 	}
 
 	public static Process asyncExecute(final ProcessBuilder processBuilder, final File outAndErrFile) throws InterruptedException, IOException {
-		if (SystemUtils.IS_OS_HP_UX) {
+		if (SystemUtils.IS_OS_HP_UX || SystemUtils.IS_OS_AIX) {
 			final ProcessBuilderExecutor pbe = executeOnHpUx(processBuilder, outAndErrFile);
 			return pbe.getProcess();
 		}
