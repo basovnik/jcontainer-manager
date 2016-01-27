@@ -15,6 +15,9 @@
  */
 package org.jboss.qa.jcontainer;
 
+import org.apache.commons.lang3.SystemUtils;
+
+import org.jboss.qa.jcontainer.util.ProcessUtils;
 import org.jboss.qa.jcontainer.util.ReflectionUtils;
 import org.jboss.qa.jcontainer.util.executor.ProcessBuilderExecutor;
 
@@ -144,6 +147,15 @@ public abstract class Container<T extends Configuration, U extends Client<T>, V 
 					} catch (InterruptedException e) {
 						throw new IllegalStateException("Container was not stopped", e);
 					}
+				}
+			}
+		}));
+		addShutdownHook(new Thread(new Runnable() {
+			public void run() {
+				String pid = ProcessUtils.getJavaPidByContainerId(getId());
+				if (pid != null) {
+					log.warn("Container should already stopped. Kill it.");
+					ProcessUtils.killJavaByContainerId(getId());
 				}
 			}
 		}));
