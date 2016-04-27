@@ -21,11 +21,7 @@ import org.jboss.qa.jcontainer.util.executor.ProcessBuilderExecutor;
 import java.io.File;
 import java.io.IOException;
 import java.net.Socket;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import lombok.extern.slf4j.Slf4j;
@@ -40,7 +36,7 @@ public abstract class AbstractContainer<T extends Configuration, U extends Clien
 	protected U client;
 	private Class<T> confClass;
 	private Class<U> clientClass;
-	private volatile List<Thread> shutdownHooks = new ArrayList<>();
+	private volatile boolean isRunning = false;
 
 	public AbstractContainer(T configuration) {
 		id = System.nanoTime();
@@ -91,11 +87,6 @@ public abstract class AbstractContainer<T extends Configuration, U extends Clien
 
 	protected abstract File getLogDirInternal();
 
-	protected void addShutdownHook(Thread hook) {
-		shutdownHooks.add(hook);
-		Runtime.getRuntime().addShutdownHook(hook);
-	}
-
 	@Override
 	public synchronized void start() throws Exception {
 		if (isRunning()) {
@@ -127,49 +118,36 @@ public abstract class AbstractContainer<T extends Configuration, U extends Clien
 		javaOpts.append(String.format(" -D%s=%s", JCONTAINER_ID, id));
 		processBuilder.environment().put(javaOptsEnvName, javaOpts.toString());
 
-		final Process process = ProcessBuilderExecutor.asyncExecute(processBuilder, getStdoutLogFile());
+		ProcessBuilderExecutor.asyncExecute(processBuilder, getStdoutLogFile());
 
-		addShutdownHook(new Thread(new Runnable() {
+		final Container c = this;
+		Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
 			public void run() {
-				if (process != null) {
-					process.destroy();
-					try {
-						process.waitFor();
-					} catch (InterruptedException e) {
-						throw new IllegalStateException("Container was not stopped", e);
-					}
+				try {
+					c.stop();
+				} catch (Exception e) {
+					log.error(e.getMessage(), e);
 				}
 			}
 		}));
 		waitForStarted();
-	}
-
-	public synchronized void stop(long timeout, TimeUnit timeUnit) throws Exception {
-		if (isRunning()) {
-			client.close();
-			final ExecutorService service = Executors.newCachedThreadPool();
-			final List<Future> futures = new ArrayList<>();
-			for (Thread shutdownHook : shutdownHooks) {
-				Runtime.getRuntime().removeShutdownHook(shutdownHook);
-				futures.add(service.submit(shutdownHook));
-			}
-			service.shutdown();
-			if (!service.awaitTermination(timeout, timeUnit)) {
-				for (Future future : futures) {
-					future.cancel(true);
-				}
-				log.error("Container shutdown process didn't finish in {} {}!", timeout, timeUnit);
-			} else {
-				log.info("Container was stopped");
-			}
-			shutdownHooks.clear();
-		}
+		isRunning = true;
 	}
 
 	@Override
-	public synchronized void stop() throws Exception {
-		stop(1, TimeUnit.MINUTES);
+	public final synchronized void stop() throws Exception {
+		if (!isRunning()) {
+			return;
+		}
+		try {
+			stopInternal();
+			client.close();
+		} finally {
+			isRunning = false;
+		}
 	}
+
+	protected abstract void stopInternal() throws Exception;
 
 	@Override
 	public void close() throws IOException {
@@ -182,7 +160,7 @@ public abstract class AbstractContainer<T extends Configuration, U extends Clien
 
 	@Override
 	public boolean isRunning() throws Exception {
-		return !shutdownHooks.isEmpty();
+		return isRunning;
 	}
 
 	protected synchronized void waitForStarted() throws InterruptedException {

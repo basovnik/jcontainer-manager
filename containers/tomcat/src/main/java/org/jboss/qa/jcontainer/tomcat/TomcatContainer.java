@@ -144,20 +144,14 @@ public class TomcatContainer<T extends TomcatConfiguration, U extends TomcatClie
 	}
 
 	@Override
-	public synchronized void start() throws Exception {
-		super.start();
-		addShutdownHook(new Thread(new Runnable() {
-			@Override
-			public void run() {
-				try {
-					final ProcessBuilder processBuilder = new ProcessBuilder(configuration.generateStopCommand());
-					processBuilder.environment().put("CATALINA_HOME", configuration.getDirectory().getAbsolutePath());
-					ProcessBuilderExecutor.syncExecute(processBuilder);
-				} catch (Exception e) {
-					throw new IllegalStateException("Tomcat container was not stopped", e);
-				}
-			}
-		}));
+	protected void stopInternal() throws Exception {
+		try {
+			final ProcessBuilder processBuilder = new ProcessBuilder(configuration.generateStopCommand());
+			processBuilder.environment().put("CATALINA_HOME", configuration.getDirectory().getAbsolutePath());
+			ProcessBuilderExecutor.syncExecute(processBuilder);
+		} catch (Exception e) {
+			throw new IllegalStateException("Tomcat container was not stopped", e);
+		}
 	}
 
 	@Override

@@ -22,7 +22,6 @@ import org.apache.karaf.jaas.modules.properties.PropertiesBackingEngineFactory;
 
 import org.jboss.qa.jcontainer.AbstractContainer;
 import org.jboss.qa.jcontainer.karaf.utils.CoreUtils;
-import org.jboss.qa.jcontainer.util.executor.ProcessBuilderExecutor;
 
 import java.io.File;
 import java.util.HashMap;
@@ -62,6 +61,7 @@ public class KarafContainer<T extends KarafConfiguration, U extends KarafClient<
 
 	@Override
 	public synchronized void start() throws Exception {
+		// Backup and remove "setenv" file to be able to change java memory options
 		final File setEnvFile = new File(configuration.getDirectory(), "bin" + File.separator
 				+ (SystemUtils.IS_OS_WINDOWS ? "setenv.bat" : "setenv"));
 		if (setEnvFile != null && setEnvFile.exists()) {
@@ -70,21 +70,21 @@ public class KarafContainer<T extends KarafConfiguration, U extends KarafClient<
 			log.info("File '{}' was renamed to '{}' to ensure the propagation of own environment properties",
 					setEnvFile.getName(), setEnvBacFile.getName());
 		}
+
+		// Change SSH port if necessary
 		if (getConfiguration().getSshPort() != KarafConfiguration.DEFAULT_SSH_PORT) {
 			setEtcProperty("sshPort", getConfiguration().getSshPort(), "org.apache.karaf.shell");
 		}
+
+		// Redirect karaf output to file
 		configuration.getEnvProps().put("KARAF_REDIRECT", getStdoutLogFile().getAbsolutePath());
+
 		super.start();
-		addShutdownHook(new Thread(new Runnable() {
-			public void run() {
-				try {
-					final ProcessBuilder processBuilder = new ProcessBuilder(configuration.generateStopCommand());
-					ProcessBuilderExecutor.syncExecute(processBuilder);
-				} catch (Exception e) {
-					throw new IllegalStateException("Karaf container was not stopped", e);
-				}
-			}
-		}));
+	}
+
+	@Override
+	protected void stopInternal() throws Exception {
+		getClient().execute("system:shutdown --force");
 	}
 
 	public File getConfigFile(String name) {

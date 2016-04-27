@@ -34,5 +34,10 @@ public class FuseContainer<T extends FuseConfiguration, U extends FuseClient<T>,
 	protected File getLogDirInternal() {
 		return new File(CoreUtils.getSystemProperty(client, "karaf.data", "dev:system-property"), "log");
 	}
+
+	@Override
+	protected void stopInternal() throws Exception {
+		getClient().execute("osgi:shutdown --force");
+	}
 }
 
